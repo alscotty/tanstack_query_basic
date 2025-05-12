@@ -6,156 +6,128 @@ import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persist
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 
 const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      gcTime: 1000 * 60 * 60 * 1, // 1 hour to retain cached data on an inactive query before removing it
+    defaultOptions: {
+        queries: {
+            gcTime: 1000 * 60 * 60 * 1, // 1 hour to retain cached data on an inactive query before removing it
+        },
     },
-  },
 })
 
 // persists data to the client in localstorage
 const persister = createSyncStoragePersister({
-  storage: window.localStorage,
+    storage: window.localStorage,
 })
 
-type Post = {
-  id: number
-  title: string
-  body: string
+type Pokemon = {
+    name: string,
+    id: number
 }
 
-function usePosts() {
-  return useQuery({
-    queryKey: ['posts'],
-    queryFn: async (): Promise<Array<Post>> => {
-      const response = await fetch('https://jsonplaceholder.typicode.com/posts')
-      return await response.json()
-    },
-  })
+type PokemonMap = {
+    data: {
+        gen1_species: Array<Pokemon>
+    }
 }
 
-function Posts({
-  setPostId,
-}: {
-  setPostId: React.Dispatch<React.SetStateAction<number>>
-}) {
-  const queryClient = useQueryClient()
-  const { status, data, error, isFetching } = usePosts()
+function usePokemon() {
+    return useQuery({
+        queryKey: ['pokemon'],
+        queryFn: async (): Promise<PokemonMap> => {
+            const graphQlQuery = `
+            {
+                gen1_species: pokemon_v2_pokemonspecies(
+                    where: { pokemon_v2_generation: { name: { _eq: "generation-i" } } }
+                    order_by: { id: asc }
+                ) {
+                    name
+                    id
+                }
+            }
+            `
 
-  return (
-    <div>
-      <h1>Posts</h1>
-      <div>
-        {status === 'pending' ? (
-          'Loading...'
-        ) : status === 'error' ? (
-          <span>Error: {error.message}</span>
-        ) : (
-          <>
+            const response = await fetch('https://beta.pokeapi.co/graphql/v1beta', {
+                method: 'post',
+                body: JSON.stringify({
+                    query: graphQlQuery
+                })
+            });
+            let responseJSON = await response.json();
+            console.log({ responseJSON });
+            
+            return responseJSON
+        },
+    })
+}
+
+function Pokemon() {
+    const queryClient = useQueryClient()
+    const { status, data, error, isFetching } = usePokemon()
+
+    console.log({ data })
+    return (
+        <div>
+            <h1>Pokemon</h1>
             <div>
-              {data.map((post) => (
-                <p key={post.id}>
-                  <a
-                    onClick={() => setPostId(post.id)}
-                    href="#"
-                    style={
-                      // We can access the query data here to show bold links for
-                      // ones that are cached
-                      queryClient.getQueryData(['post', post.id])
-                        ? {
-                            fontWeight: 'bold',
-                            color: 'green',
-                          }
-                        : {}
-                    }
-                  >
-                    {post.title}
-                  </a>
-                </p>
-              ))}
+                {status === 'pending' ? (
+                    'Loading...'
+                ) : status === 'error' ? (
+                    <span>Error: {error.message}</span>
+                ) : (
+                    <>
+                        <div>
+                            {data?.data?.gen1_species.map((pokemon) => (
+                                <p key={pokemon.id}>
+                                    <span  style={
+                                            // We can access the query data here to show bold links for
+                                            // ones that are cached
+                                            queryClient.getQueryData(['pokemon', pokemon.id])
+                                                ? {
+                                                    fontWeight: 'bold',
+                                                    color: 'green',
+                                                }
+                                                : {}
+                                        }>
+                                            {``}
+                                        </span>
+                                    <a
+                                        href="#"
+                                       
+                                    >
+                                        {pokemon.name}
+
+                                    </a>
+                                </p>
+                            ))}
+                        </div>
+                        <div>{isFetching ? 'Background Updating...' : ' '}</div>
+                    </>
+                )}
             </div>
-            <div>{isFetching ? 'Background Updating...' : ' '}</div>
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
-const getPostById = async (id: number): Promise<Post> => {
-  const response = await fetch(
-    `https://jsonplaceholder.typicode.com/posts/${id}`,
-  )
-  return await response.json()
-}
-
-function usePost(postId: number) {
-  return useQuery({
-    queryKey: ['post', postId],
-    queryFn: () => getPostById(postId),
-    enabled: !!postId,
-  })
-}
-
-function Post({
-  postId,
-  setPostId,
-}: {
-  postId: number
-  setPostId: React.Dispatch<React.SetStateAction<number>>
-}) {
-  const { status, data, error, isFetching } = usePost(postId)
-
-  return (
-    <div>
-      <div>
-        <a onClick={() => setPostId(-1)} href="#">
-          Back
-        </a>
-      </div>
-      {!postId || status === 'pending' ? (
-        'Loading...'
-      ) : status === 'error' ? (
-        <span>Error: {error.message}</span>
-      ) : (
-        <>
-          <h1>{data.title}</h1>
-          <div>
-            <p>{data.body}</p>
-          </div>
-          <div>{isFetching ? 'Background Updating...' : ' '}</div>
-        </>
-      )}
-    </div>
-  )
+        </div>
+    )
 }
 
 function App() {
-  const [postId, setPostId] = React.useState(-1)
 
-  return (
-    <PersistQueryClientProvider
-      client={queryClient}
-      persistOptions={{ persister }}
-    >
-      <p>
-        As you visit the posts below, you will notice them in a loading state
-        the first time you load them. However, after you return to this list and
-        click on any posts you have already visited again, you will see them
-        load instantly and background refresh right before your eyes!{' '}
-        <strong>
-          (You may need to throttle your network speed to simulate longer
-          loading sequences)
-        </strong>
-      </p>
-      {postId > -1 ? (
-        <Post postId={postId} setPostId={setPostId} />
-      ) : (
-        <Posts setPostId={setPostId} />
-      )}
-      <ReactQueryDevtools initialIsOpen />
-    </PersistQueryClientProvider>
-  )
+    return (
+        <PersistQueryClientProvider
+            client={queryClient}
+            persistOptions={{ persister }}
+        >
+            <p>
+                As you visit the pokemon below, you will notice them in a loading state
+                the first time you load them. However, after you return to this list and
+                click on any pokemon you have already visited again, you will see them
+                load instantly and background refresh right before your eyes!{' '}
+                <strong>
+                    (You may need to throttle your network speed to simulate longer
+                    loading sequences)
+                </strong>
+            </p>
+            <Pokemon />
+            <ReactQueryDevtools initialIsOpen />
+        </PersistQueryClientProvider>
+    )
 }
 
 const rootElement = document.getElementById('root') as HTMLElement
