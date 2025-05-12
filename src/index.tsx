@@ -8,11 +8,12 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      gcTime: 1000 * 60 * 60 * 24, // 24 hours
+      gcTime: 1000 * 60 * 60 * 1, // 1 hour to retain cached data on an inactive query before removing it
     },
   },
 })
 
+// persists data to the client in localstorage
 const persister = createSyncStoragePersister({
   storage: window.localStorage,
 })
